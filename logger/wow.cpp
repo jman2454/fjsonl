@@ -1,0 +1,296 @@
+#include <string>
+#include <iostream>
+#include <vector>
+#include <type_traits>
+#include <cstring>
+
+// Constants for field sizes
+#define MAX_INT_CHARS 10
+#define MAX_DOUBLE_CHARS 16
+#define MAX_BOOL_CHARS 7
+#define MAX_STRING_CHARS 30  // Default max for string fields
+
+// Macro for field type detection
+#define DEFINE_LOGGABLE(StructName, ...) \
+    DEFINE_LOGGABLE_STRUCT(StructName, __VA_ARGS__) \
+    IMPLEMENT_LOGGER(StructName)
+
+// Helper template to calculate JSON field sizes
+template <typename T>
+struct FieldTraits {
+    static constexpr const char* format_str = "%*d";
+    static constexpr int max_chars = MAX_INT_CHARS;
+    static constexpr const char* get_value(const T& val) { return nullptr; }
+};
+
+template <>
+struct FieldTraits<int> {
+    static constexpr const char* format_str = "%*d";
+    static constexpr int max_chars = MAX_INT_CHARS;
+    static constexpr const char* get_value(const int& val) { return nullptr; }
+};
+
+template <>
+struct FieldTraits<double> {
+    static constexpr const char* format_str = "%*.6f";
+    static constexpr int max_chars = MAX_DOUBLE_CHARS;
+    static constexpr const char* get_value(const double& val) { return nullptr; }
+};
+
+template <>
+struct FieldTraits<bool> {
+    static constexpr const char* format_str = "%*s";
+    static constexpr int max_chars = MAX_BOOL_CHARS;
+    static const char* get_value(const bool& val) { return val ? "true" : "false"; }
+};
+
+template <>
+struct FieldTraits<std::string> {
+    static constexpr const char* format_str = "%s";
+    static constexpr int max_chars = MAX_STRING_CHARS;
+    static const char* get_value(const std::string& val) { return val.c_str(); }
+};
+
+// Struct to hold field information
+struct FieldInfo {
+    std::string name;
+    size_t offset;
+    size_t position;
+    size_t max_chars;
+    std::string type_name;
+    
+    const char* (*get_format_str)();
+    const char* (*get_value_str)(const void*);
+    void (*format_func)(char*, size_t, const void*);
+};
+
+// Macro to define loggable struct with introspection
+#define DEFINE_LOGGABLE_STRUCT(StructName, ...) \
+    struct StructName { \
+        __VA_ARGS__ \
+        \
+        /* Field descriptors */ \
+        static std::vector<FieldInfo> get_fields() { \
+            std::vector<FieldInfo> fields; \
+            /* Field definitions go here - would be generated */ \
+            return fields; \
+        } \
+        \
+        /* Calculate start positions */ \
+        static std::vector<size_t> calculate_positions() { \
+            std::vector<size_t> positions; \
+            size_t current_pos = 2; /* Start after { */ \
+            \
+            for (const auto& field : get_fields()) { \
+                current_pos += 1; /* For " */ \
+                current_pos += field.name.length(); \
+                current_pos += 3; /* For ": " */ \
+                positions.push_back(current_pos); \
+                current_pos += field.max_chars; \
+                current_pos += 1; /* For , or } */ \
+            } \
+            \
+            return positions; \
+        } \
+        \
+        /* Generate empty template */ \
+        static std::string empty() { \
+            std::string result = "{"; \
+            auto positions = calculate_positions(); \
+            auto fields = get_fields(); \
+            \
+            for (size_t i = 0; i < fields.size(); ++i) { \
+                result += "\"" + fields[i].name + "\":"; \
+                \
+                /* Add spaces for the field value */ \
+                for (size_t j = 0; j < fields[i].max_chars; ++j) { \
+                    result += " "; \
+                } \
+                \
+                if (i < fields.size() - 1) { \
+                    result += ","; \
+                } \
+            } \
+            \
+            result += "}"; \
+            return result; \
+        } \
+        \
+        /* Format the struct to JSON */ \
+        void format(char* buf) const { \
+            auto fields = get_fields(); \
+            auto positions = calculate_positions(); \
+            \
+            for (size_t i = 0; i < fields.size(); ++i) { \
+                fields[i].format_func(buf + positions[i], fields[i].max_chars, \
+                                     reinterpret_cast<const char*>(this) + fields[i].offset); \
+            } \
+        } \
+    };
+
+// Macro to implement the logger for a struct
+#define IMPLEMENT_LOGGER(StructName) \
+    template <> \
+    class JsonLogger<StructName> { \
+    private: \
+        std::string _buf{StructName::empty()}; \
+    public: \
+        JsonLogger() {} \
+        \
+        void log(const StructName& obj) { \
+            obj.format(_buf.data()); \
+            std::cout << _buf << std::endl; \
+        } \
+    };
+
+// Base logger template
+template <typename T>
+class JsonLogger {
+    // Base implementation - specialized for each struct
+};
+
+// Example using a more concrete implementation of the macro
+// This would be generated by the preprocessor or a code generator tool
+
+struct LoggableTest {
+    int x = 0;
+    int y = 0;
+    bool active = false;
+    std::string name;
+
+    // Constructor
+    LoggableTest(int x_val, int y_val, bool active_val, const std::string& name_val)
+        : x(x_val), y(y_val), active(active_val), name(name_val) {}
+
+    // Field descriptors
+    static std::vector<FieldInfo> get_fields() {
+        std::vector<FieldInfo> fields;
+        
+        // This would be code-generated
+        fields.push_back({"x", offsetof(LoggableTest, x), 0, MAX_INT_CHARS,
+            "int",
+            []() -> const char* { return "%*d"; },
+            [](const void* ptr) -> const char* { return nullptr; },
+            [](char* buf, size_t max_size, const void* field_ptr) {
+                int val = *reinterpret_cast<const int*>(field_ptr);
+                snprintf(buf, max_size, "%*d", static_cast<int>(MAX_INT_CHARS) - 1, val);
+            }
+        });
+        
+        fields.push_back({"y", offsetof(LoggableTest, y), 0, MAX_INT_CHARS,
+            "int",
+            []() -> const char* { return "%*d"; },
+            [](const void* ptr) -> const char* { return nullptr; },
+            [](char* buf, size_t max_size, const void* field_ptr) {
+                int val = *reinterpret_cast<const int*>(field_ptr);
+                snprintf(buf, max_size, "%*d", static_cast<int>(MAX_INT_CHARS) - 1, val);
+            }
+        });
+        
+        fields.push_back({"active", offsetof(LoggableTest, active), 0, MAX_BOOL_CHARS,
+            "bool",
+            []() -> const char* { return "%*s"; },
+            [](const void* ptr) -> const char* { 
+                return *reinterpret_cast<const bool*>(ptr) ? "true" : "false"; 
+            },
+            [](char* buf, size_t max_size, const void* field_ptr) {
+                bool val = *reinterpret_cast<const bool*>(field_ptr);
+                snprintf(buf, max_size, "%*s", static_cast<int>(MAX_BOOL_CHARS) - 1, 
+                         val ? "true" : "false");
+            }
+        });
+        
+        fields.push_back({"name", offsetof(LoggableTest, name), 0, MAX_STRING_CHARS,
+            "std::string",
+            []() -> const char* { return "%s"; },
+            [](const void* ptr) -> const char* { 
+                return reinterpret_cast<const std::string*>(ptr)->c_str(); 
+            },
+            [](char* buf, size_t max_size, const void* field_ptr) {
+                const std::string& val = *reinterpret_cast<const std::string*>(field_ptr);
+                snprintf(buf, max_size, "%-*s", static_cast<int>(MAX_STRING_CHARS) - 1, 
+                         val.c_str());
+            }
+        });
+        
+        return fields;
+    }
+
+    // The rest would be generated by the DEFINE_LOGGABLE_STRUCT macro
+    static std::vector<size_t> calculate_positions() {
+        std::vector<size_t> positions;
+        size_t current_pos = 2; /* Start after { */
+        
+        for (const auto& field : get_fields()) {
+            current_pos += 1; /* For " */
+            current_pos += field.name.length();
+            current_pos += 3; /* For ": " */
+            positions.push_back(current_pos);
+            current_pos += field.max_chars;
+            current_pos += 1; /* For , or } */
+        }
+        
+        return positions;
+    }
+    
+    static std::string empty() {
+        std::string result = "{";
+        auto positions = calculate_positions();
+        auto fields = get_fields();
+        
+        for (size_t i = 0; i < fields.size(); ++i) {
+            result += "\"" + fields[i].name + "\":";
+            
+            /* Add spaces for the field value */
+            for (size_t j = 0; j < fields[i].max_chars; ++j) {
+                result += " ";
+            }
+            
+            if (i < fields.size() - 1) {
+                result += ",";
+            }
+        }
+        
+        result += "}";
+        return result;
+    }
+    
+    void format(char* buf) const {
+        auto fields = get_fields();
+        auto positions = calculate_positions();
+        
+        for (size_t i = 0; i < fields.size(); ++i) {
+            fields[i].format_func(buf + positions[i], fields[i].max_chars, 
+                                 reinterpret_cast<const char*>(this) + fields[i].offset);
+        }
+    }
+};
+
+// Template specialization for LoggableTest
+template <>
+class JsonLogger<LoggableTest> {
+private:
+    std::string _buf{LoggableTest::empty()};
+public:
+    JsonLogger() {}
+    
+    void log(const LoggableTest& obj) {
+        obj.format(_buf.data());
+        std::cout << _buf << std::endl;
+    }
+};
+
+// Example usage
+int main() {
+    JsonLogger<LoggableTest> logger;
+    LoggableTest test(42, 1337, true, "Example");
+    logger.log(test);
+    
+    // Change values
+    test.x = 9999;
+    test.active = false;
+    test.name = "Modified";
+    logger.log(test);
+    
+    return 0;
+}

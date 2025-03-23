@@ -1,0 +1,10 @@
+
+# maybe simplify so it'd just be 
+# test_struct:
+# - x: int32
+# etc...
+
+name: test_struct
+members: 
+- x: int32
+- y: int32
