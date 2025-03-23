@@ -165,7 +165,7 @@ let format_value (name, typ) =
 
 let generate_format_call (name, typ) offset ctx_lookup = 
   match typ with 
-  | Nested _ -> "\t\thead += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
+  | Nested _ -> "head += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
   | _ -> 
     "head += " 
     ^ (string_of_int offset) 
@@ -177,14 +177,14 @@ let generate_format_call (name, typ) offset ctx_lookup =
     ^ string_of_int (max_chars ctx_lookup typ - 1)
     ^ ", "
     ^ format_value (name, typ)
-    ^ ");\n"
+    ^ ");"
 
 let generate_format_method members offsets ctx_lookup = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
   ^ string_join (
       fun (member, offset) -> generate_format_call member offset ctx_lookup
     ) "\n\t\t" (List.combine members offsets)
-  ^ "\t}"
+  ^ "\n\t}"
 
 let generate_member_defn (name, typ) = 
   string_of_member_type typ ^ " " ^ name ^ ";"
