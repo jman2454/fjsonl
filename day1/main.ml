@@ -32,17 +32,18 @@ and member_type =
 | Nested of string
 and member = string * member_type
 
+(* maybe delineate cpp type names and abstract names in separate methods -- for now, conflate *)
 let string_of_member_type typ = 
   match typ with 
-  | String -> "string"
-  | UInt8 -> "uint8"
-  | Int8 -> "int8"
-  | UInt16 -> "uint16"
-  | Int16 -> "int16"
-  | UInt32 -> "uint32"
-  | Int32 -> "int32"
-  | UInt64 -> "uint64"
-  | Int64 -> "int64"
+  | String -> "std::string"
+  | UInt8 -> "uint8_t"
+  | Int8 -> "int8_t"
+  | UInt16 -> "uint16_t"
+  | Int16 -> "int16_t"
+  | UInt32 -> "uint32_t"
+  | Int32 -> "int32_t"
+  | UInt64 -> "uint64_t"
+  | Int64 -> "int64_t"
   | Char -> "char"
   | Bool -> "bool"
   | Nested n -> n
@@ -143,7 +144,10 @@ let make_empty_template members =
 let generate_template_method members = 
   "\tstatic std::string empty()\n\t{\n\t\treturn \"" ^ make_empty_template members ^ "\";\n\t}"
 
-(* add format-vlua *)
+let format_value (name, typ) = 
+  match typ with 
+  | Bool -> name ^ " ? \"true\" : \"false\""
+  | _ -> name
 
 let generate_format_call (name, typ) offset = 
   "head += " 
@@ -155,7 +159,7 @@ let generate_format_call (name, typ) offset =
   ^ "\", " 
   ^ string_of_int (max_chars typ - 1)
   ^ ", "
-  ^ name
+  ^ format_value (name, typ)
   ^ ");\n"
 
 let generate_format_method members offsets = 
@@ -165,10 +169,37 @@ let generate_format_method members offsets =
     ) "\n\t\t" (List.combine members offsets)
   ^ "\t}"
 
+let generate_member_defn (name, typ) = 
+  string_of_member_type typ ^ " " ^ name ^ ";"
+
+let generate_member_defns members = 
+  string_join (generate_member_defn) "\n\t" members
+
+let generate_struct_definition def = 
+  "struct " ^ def.name ^ "\n{\t"
+  ^ generate_member_defns def.members
+  ^ "\n"
+  ^ generate_template_method def.members
+  ^ "\n"
+  ^ generate_format_method def.members (compute_offsets def.members)
+  ^ "\n};"
+
+(* let logger_defn = {|template <typename TStruct>
+class json_logger
+{
+    std::string _buf{TStruct::empty()};
+public:
+    json_logger() {}
+
+    void log(const TStruct& t) {
+        t.format(_buf.data());
+        std::cout << _buf << std::endl;
+    }
+};|} *)
+
 let () = 
 parse_yaml "/users/jamesmeyers/life/test_file.yaml"
 |> read_struct
 |> fun def -> "definition: " ^ (string_of_schema def) 
-          ^ "\ntemplate:   \n" ^ generate_template_method def.members
-          ^ "\nformat:   \n"    ^ generate_format_method def.members (compute_offsets def.members)
+          ^ "\ngenerated :   \n" ^ generate_struct_definition def
 |> print_endline
