@@ -1,1 +1,1 @@
-dune exec main > ./logger/structs.h
+dune exec generator > ./logger/structs.h

@@ -1,4 +1,4 @@
 (executable
- (public_name main)
+ (public_name generator)
  (name main)
  (libraries yaml))
