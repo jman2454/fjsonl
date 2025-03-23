@@ -16,6 +16,7 @@ let parse_yaml filename =
   | Ok yaml_value -> yaml_value
   | Error (`Msg msg) -> failwith ("YAML parsing error: " ^ msg)
 
+(* note that we don't allow for recursion in these struct definitions. meant to be simple data *)
 type loggable_struct = { name : string; members : member list }
 and member_type = 
 | String
@@ -65,7 +66,6 @@ let parse_type type_string =
 
 let string_of_member member = 
   (fst member) ^ ": " ^ (string_of_member_type (snd member))
-
 
 let string_join s_of_v sep l = 
   if l = [] then "" else 
@@ -150,17 +150,20 @@ let format_value (name, typ) =
   | _ -> name
 
 let generate_format_call (name, typ) offset = 
-  "head += " 
-  ^ (string_of_int offset) 
-  ^ ";\n\t\tsnprintf(head, " 
-  ^ string_of_int (max_chars typ) 
-  ^ ", \""
-  ^ format_string typ
-  ^ "\", " 
-  ^ string_of_int (max_chars typ - 1)
-  ^ ", "
-  ^ format_value (name, typ)
-  ^ ");\n"
+  match typ with 
+  | Nested _ -> "\t\thead += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
+  | _ -> 
+    "head += " 
+    ^ (string_of_int offset) 
+    ^ ";\n\t\tsnprintf(head, " 
+    ^ string_of_int (max_chars typ) 
+    ^ ", \""
+    ^ format_string typ
+    ^ "\", " 
+    ^ string_of_int (max_chars typ - 1)
+    ^ ", "
+    ^ format_value (name, typ)
+    ^ ");\n"
 
 let generate_format_method members offsets = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
