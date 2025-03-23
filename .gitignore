@@ -1,0 +1,4 @@
+logger/structs.h
+.vscode/*
+_build/*
+*.out

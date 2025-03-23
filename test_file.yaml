@@ -4,14 +4,16 @@
 # - x: int32
 # etc...
 
-name: test_struct
-members: 
-- p: int32
-- q: bool
-- a: int32
-
-name: test_struct_2
+name: test_struct_orig
 members: 
 - x: int32
 - y: int32
-- z: bool
+- b: bool
+
+name: outer_struct
+members: 
+- x: int32
+- inner: test_struct_orig
+- b: bool
+- z: test_struct_orig
+- f: uint64

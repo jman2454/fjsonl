@@ -80,7 +80,7 @@ let parse_member (yaml : yaml) =
   | `O { m_members = (`Scalar name, `Scalar typ)::[]; _ } -> (name.value, parse_type typ.value)
   | _ -> failwith "bad"
 
-let read_struct (yaml : yaml) = 
+let read_structs (yaml : yaml) = 
   (match yaml with 
   | `O mapping -> 
     mapping.m_members
@@ -96,7 +96,13 @@ let read_struct (yaml : yaml) =
   |> (fun (_, names, members) -> 
     List.combine names members
     |> List.map (fun (name, members) -> { name = name; members = members } )
+    |> List.rev
   )
+
+module StringMap = Map.Make(String)
+
+(* not going to do the topo sort yet -- we'll assume things are given in DAG order *)
+
 (* we'll probably want a dynamic mapping of max len for (nested) structs *)
 
 (* maybe migrate to inttypes.h for macro usage *)
@@ -107,67 +113,76 @@ let format_string = function
 | Int64 -> "%*lld"
 | UInt8 | UInt16 | UInt32 -> "%*u"
 | UInt64 -> "%*llu"
-| String | Nested _ | Bool -> "%s"
-| Char -> "%c"
+| String | Bool -> "%*s"
+| Char -> "%*c"
+| Nested _ -> failwith "no format string for Nested!"
+
+type context = { template : string }
 
 (* so max chars will take in context containing mappings for already-parsed struct types that may be Nested elsewhere *)
-let max_chars = function
+let max_chars ctx_lookup = function
 | Char -> 1
 | Int8 | UInt8 -> 4
 | Bool | Int16 | UInt16 -> 6
 | Int32 | UInt32 -> 11
 | Int64 | UInt64 -> 21
-| Nested _ -> failwith "not implemented"
+| Nested s -> 
+  (match StringMap.find_opt s ctx_lookup with
+  | Some ctx -> String.length (ctx.template |> Str.global_replace (Str.regexp {|\\|}) "")
+  | _ -> failwith ("unknown type: " ^ s))
 | String -> failwith "bad"
 
-let compute_offsets members = 
-  List.fold_left (fun (prev_max_chars, offsets) member -> 
+let compute_offsets members ctx_lookup = 
+  List.fold_left (fun (prev_max_chars, offsets) (name, typ) -> 
     (* 4 because (comma|open brace), (quote), (quote), (colon) *)
-    (max_chars (snd member), offsets@[prev_max_chars + 4 + (String.length (fst member))])
+    (max_chars ctx_lookup typ, offsets@[prev_max_chars + 4 + (String.length name)])
   ) (0, []) members
   |> snd
 
-let member_type_template typ = 
+let member_type_template typ ctx_lookup = 
   match typ with 
-  | Nested _ -> failwith "not implemented " (* will be a lookup *)
-  | t -> String.make (max_chars t) ' '
+  | Nested s -> 
+    (match StringMap.find_opt s ctx_lookup with
+    | Some ctx -> ctx.template
+    | _ -> failwith ("unknown type: " ^ s))
+  | t -> String.make (max_chars ctx_lookup t) ' '
 
-let member_template (name, typ) = 
-  "\\\"" ^ name ^ "\\\":" ^ member_type_template typ
+let member_template ctx_lookup (name, typ) = 
+  "\\\"" ^ name ^ "\\\":" ^ member_type_template typ ctx_lookup
 
-let make_empty_template members = 
+let make_empty_template members ctx_lookup = 
   "{"
-  ^ string_join member_template "," members
+  ^ string_join (member_template ctx_lookup) "," members
   ^ "}"
 
-let generate_template_method members = 
-  "\tstatic std::string empty()\n\t{\n\t\treturn \"" ^ make_empty_template members ^ "\";\n\t}"
+let generate_template_method members ctx_lookup = 
+  "\tstatic std::string empty()\n\t{\n\t\treturn \"" ^ make_empty_template members ctx_lookup ^ "\";\n\t}"
 
 let format_value (name, typ) = 
   match typ with 
   | Bool -> name ^ " ? \"true\" : \"false\""
   | _ -> name
 
-let generate_format_call (name, typ) offset = 
+let generate_format_call (name, typ) offset ctx_lookup = 
   match typ with 
   | Nested _ -> "\t\thead += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
   | _ -> 
     "head += " 
     ^ (string_of_int offset) 
     ^ ";\n\t\tsnprintf(head, " 
-    ^ string_of_int (max_chars typ) 
+    ^ string_of_int (max_chars ctx_lookup typ) 
     ^ ", \""
     ^ format_string typ
     ^ "\", " 
-    ^ string_of_int (max_chars typ - 1)
+    ^ string_of_int (max_chars ctx_lookup typ - 1)
     ^ ", "
     ^ format_value (name, typ)
     ^ ");\n"
 
-let generate_format_method members offsets = 
+let generate_format_method members offsets ctx_lookup = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
   ^ string_join (
-      fun (member, offset) -> generate_format_call member offset
+      fun (member, offset) -> generate_format_call member offset ctx_lookup
     ) "\n\t\t" (List.combine members offsets)
   ^ "\t}"
 
@@ -177,14 +192,24 @@ let generate_member_defn (name, typ) =
 let generate_member_defns members = 
   string_join (generate_member_defn) "\n\t" members
 
-let generate_struct_definition def = 
+let generate_struct def ctx_lookup = 
+  let template = make_empty_template def.members ctx_lookup in 
+  StringMap.add def.name { template = template } ctx_lookup,
   "struct " ^ def.name ^ "\n{\t"
   ^ generate_member_defns def.members
   ^ "\n"
-  ^ generate_template_method def.members
+  ^ generate_template_method def.members ctx_lookup
   ^ "\n"
-  ^ generate_format_method def.members (compute_offsets def.members)
+  ^ generate_format_method def.members (compute_offsets def.members ctx_lookup) ctx_lookup
   ^ "\n};"
+
+let generate_structs definitions = 
+  List.fold_left (fun (ctx, structs) definition -> 
+    let ctx, cpp_generated = generate_struct definition ctx in 
+    (ctx, cpp_generated::structs)
+  ) (StringMap.empty, []) definitions
+  |> snd
+  |> List.rev
 
 (* let logger_defn = {|template <typename TStruct>
 class json_logger
@@ -201,7 +226,11 @@ public:
 
 let () = 
 parse_yaml "/users/jamesmeyers/life/test_file.yaml"
-|> read_struct
-|> string_of_list (fun def -> "definition: " ^ (string_of_schema def) 
-^ "\ngenerated :   \n" ^ generate_struct_definition def)
+|> read_structs
+|> (fun ss -> string_join string_of_schema "\n" ss |> ignore; ss)
+|> generate_structs
+|> string_join (fun x -> x) "\n"
+|> (fun s -> {|#include <cstdint>
+#include <iostream>
+#include <string>|} ^ "\n\n" ^ s)
 |> print_endline
