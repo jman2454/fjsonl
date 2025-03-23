@@ -84,20 +84,19 @@ let read_struct (yaml : yaml) =
   (match yaml with 
   | `O mapping -> 
     mapping.m_members
-    |> List.fold_left (fun def member -> 
+    |> List.fold_left (fun (state, names, members) member -> 
       match member with 
-      | (`Scalar name_field, `Scalar name_value) when name_field.value = "name" -> (Some (name_value.value), snd def)
-      | (`Scalar members_field, `A members_list) when members_field.value = "members" -> (fst def, Some (List.map parse_member members_list.s_members))
-      | _ -> failwith "bad"
-    ) (None, None)
-  | _ -> failwith "Invalid struct")
-  |> (fun (name_opt, members_opt) -> 
-    if Option.is_none name_opt || Option.is_none members_opt then 
-      failwith ""
-    else
-      { name = Option.get name_opt; members = Option.get members_opt } 
+      | (`Scalar name_field, `Scalar name_value) when name_field.value = "name" && state = `Name ->
+        (`Member, name_value.value::names, members)
+      | (`Scalar members_field, `A members_list) when members_field.value = "members" && state = `Member -> 
+        (`Name, names, List.map parse_member members_list.s_members::members)
+      | _ -> failwith "Bad input"
+    ) (`Name, [], [])
+  | _ -> failwith "Invalid structs")
+  |> (fun (_, names, members) -> 
+    List.combine names members
+    |> List.map (fun (name, members) -> { name = name; members = members } )
   )
-
 (* we'll probably want a dynamic mapping of max len for (nested) structs *)
 
 (* maybe migrate to inttypes.h for macro usage *)
@@ -203,6 +202,6 @@ public:
 let () = 
 parse_yaml "/users/jamesmeyers/life/test_file.yaml"
 |> read_struct
-|> fun def -> "definition: " ^ (string_of_schema def) 
-          ^ "\ngenerated :   \n" ^ generate_struct_definition def
+|> string_of_list (fun def -> "definition: " ^ (string_of_schema def) 
+^ "\ngenerated :   \n" ^ generate_struct_definition def)
 |> print_endline

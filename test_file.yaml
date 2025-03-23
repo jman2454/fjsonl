@@ -6,6 +6,12 @@
 
 name: test_struct
 members: 
+- p: int32
+- q: bool
+- a: int32
+
+name: test_struct_2
+members: 
 - x: int32
 - y: int32
 - z: bool
