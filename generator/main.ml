@@ -170,7 +170,7 @@ let generate_format_call (name, typ) offset ctx_lookup is_last =
   ^ (
     match typ with 
     | Nested _ -> name ^ ".format(head);"
-    | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 
+    | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 | Bool
     -> 
       "write_backwards(" 
       ^ name

@@ -74,3 +74,39 @@ void write_backwards(T value, char* buf, int count, char pad)
         iter++;
     }
 }
+
+template <typename T>
+struct is_bool : std::false_type {};
+template <> struct is_bool<bool> : std::true_type {};
+
+template <typename T, 
+typename = std::enable_if_t<is_bool<T>::value>,
+typename = void,
+typename = void>
+void write_backwards(T value, char* buf, int count, char pad) 
+{
+    int remaining = 0;
+    if (value)
+    {
+        *(buf--) = 'e';
+        *(buf--) = 'u';
+        *(buf--) = 'r';
+        *(buf--) = 't';
+        remaining = count - 4;
+    }
+    else
+    {
+        *(buf--) = 'e';
+        *(buf--) = 's';
+        *(buf--) = 'l';
+        *(buf--) = 'a';
+        *(buf--) = 'f';
+        remaining = count - 5;
+    }
+
+    while (remaining > 0)
+    {
+        *(buf--) = pad;
+        remaining--;
+    }
+}
