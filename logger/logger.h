@@ -5,8 +5,8 @@ class json_logger
 public:
     json_logger() {}
 
-    const std::string& log(const TStruct& t) {
+    const char* log(const TStruct& t) {
         t.format(_buf.data());
-        return _buf;
+        return _buf.c_str();
     }
 };

@@ -149,7 +149,7 @@ void run_benchmark(const std::string& library_name,
 int main() {
     std::ofstream results_file("benchmark_results.txt");
 
-    unsigned int seed = 12345;
+    unsigned int seed = 31454252;
 
     json_logger<outer_struct> logger{};
     run_benchmark("fjsonl", [&logger](const outer_struct& obj) {
