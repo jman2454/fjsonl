@@ -5,6 +5,10 @@ The general idea is that fields are formatted into fixed-length regions of the u
 
 Currently supports a limited set of types and fixed-length-only members. 
 
+Migrating away from snprintf to get psychotic speed over other libraries like RapidJSON. 
+RapidJSON has specialized methods for writing the various primitive types, and I was originally using snprintf which proved to be a bottleneck w.r.t. beating it on format calls. There's no need to be this insane, but it's fun. 
+For the current (limited) test set, we are over 2x RapidJSON.
+
 Example: 
 
 Input YAML:
