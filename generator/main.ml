@@ -166,24 +166,34 @@ let format_value (name, typ) =
   | _ -> name
 
 let generate_format_call (name, typ) offset ctx_lookup is_last = 
-  match typ with 
-  | Nested _ -> "head += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
-  | _ -> 
-    "head += " 
-    ^ (string_of_int offset) 
-    ^ ";\n\t\tsnprintf(head, " 
-    ^ string_of_int (max_chars ctx_lookup typ + 1) 
-    ^ ", \""
-    ^ format_string typ
-    ^ "\", " 
-    ^ string_of_int (max_chars ctx_lookup typ)
-    ^ ", "
-    ^ format_value (name, typ)
-    ^ ");\n\t\thead[" (* the overwrite here is unfortunate, and gets around the null terminator of snprintf *)
-    ^ string_of_int (max_chars ctx_lookup typ)
-    ^ "] = "
-    ^ (if is_last then "'}'" else "','")
-    ^ ";"
+  "head += " 
+  ^ string_of_int offset 
+  ^ ";\n\t\t" 
+  ^ (
+    match typ with 
+    | Nested _ -> name ^ ".format(head);"
+    | Int32 -> 
+      "write_backwards(" 
+      ^ name
+      ^ ", head" ^ " + " ^ string_of_int (max_chars ctx_lookup typ - 1)
+      ^ ", " 
+      ^ string_of_int (max_chars ctx_lookup typ) 
+      ^ ", ' ');"
+    | _ -> 
+      "snprintf(head, " 
+      ^ string_of_int (max_chars ctx_lookup typ + 1) 
+      ^ ", \""
+      ^ format_string typ
+      ^ "\", " 
+      ^ string_of_int (max_chars ctx_lookup typ)
+      ^ ", "
+      ^ format_value (name, typ)
+      ^ ");\n\t\thead[" (* the overwrite here is unfortunate, and gets around the null terminator of snprintf *)
+      ^ string_of_int (max_chars ctx_lookup typ)
+      ^ "] = "
+      ^ (if is_last then "'}'" else "','")
+      ^ ";"
+  )
 
 let generate_format_method members offsets ctx_lookup = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
@@ -225,5 +235,6 @@ parse_yaml "/users/jamesmeyers/life/test_file.yaml"
 |> string_join (fun x -> x) "\n"
 |> (fun s -> {|#include <cstdint>
 #include <iostream>
-#include <string>|} ^ "\n\n" ^ s)
+#include <string>
+#include "util.h"|} ^ "\n\n" ^ s)
 |> print_endline
