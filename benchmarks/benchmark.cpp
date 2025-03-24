@@ -151,15 +151,15 @@ int main() {
 
     unsigned int seed = 31454252;
 
-    json_logger<outer_struct> logger{};
-    run_benchmark("fjsonl", [&logger](const outer_struct& obj) {
-        return logger.log(obj);
-    }, results_file, seed);
-
     // Benchmark nlohmann::json
     run_benchmark("nlohmann::json", [](const outer_struct& obj) {
         nlohmann::json j = obj;
         return j.dump();
+    }, results_file, seed);
+
+    json_logger<outer_struct> logger{};
+    run_benchmark("fjsonl", [&logger](const outer_struct& obj) {
+        return logger.log(obj);
     }, results_file, seed);
     
     // Benchmark RapidJSON        
