@@ -1,5 +1,14 @@
-// add impls for other things
-void write_backwards(int32_t value, char* buf, int count, char pad) 
+template <typename T>
+struct is_signed_int : std::false_type {};
+template <> struct is_signed_int<int8_t> : std::true_type {};
+template <> struct is_signed_int<int16_t> : std::true_type {};
+template <> struct is_signed_int<int32_t> : std::true_type {};
+template <> struct is_signed_int<int64_t> : std::true_type {};
+
+template <typename T, 
+typename = std::enable_if_t<is_signed_int<T>::value>,
+typename = void> // differentiate from uints
+void write_backwards(T value, char* buf, int count, char pad) 
 {
     bool neg { value < 0 };
     value = std::abs(value);
@@ -21,6 +30,39 @@ void write_backwards(int32_t value, char* buf, int count, char pad)
     if (neg)
     {
         *buf = '-';
+        buf--;
+        iter++;
+    }
+
+    while (iter < count)
+    {
+        *buf = pad;
+        buf--;
+        iter++;
+    }
+}
+
+template <typename T>
+struct is_unsigned_int : std::false_type {};
+template <> struct is_unsigned_int<uint8_t> : std::true_type {};
+template <> struct is_unsigned_int<uint16_t> : std::true_type {};
+template <> struct is_unsigned_int<uint32_t> : std::true_type {};
+template <> struct is_unsigned_int<uint64_t> : std::true_type {};
+
+template <typename T, typename = std::enable_if_t<is_unsigned_int<T>::value>>
+void write_backwards(T value, char* buf, int count, char pad) 
+{
+    int iter = 0;
+    if (value == 0) {
+        *buf = '0';
+        buf--;
+        iter++;
+    }
+
+    while (value > 0)
+    {
+        *buf = "0123456789"[value % 10];
+        value /= 10;
         buf--;
         iter++;
     }

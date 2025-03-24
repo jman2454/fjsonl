@@ -119,8 +119,6 @@ let format_string = function
 
 type context = { template : string }
 
-(* TODO: get rid of the null bytes. overwrite them with whatever appropriate *)
-
 (* so max chars will take in context containing mappings for already-parsed struct types that may be Nested elsewhere *)
 let max_chars ctx_lookup = function
 | Char -> 1
@@ -172,10 +170,13 @@ let generate_format_call (name, typ) offset ctx_lookup is_last =
   ^ (
     match typ with 
     | Nested _ -> name ^ ".format(head);"
-    | Int32 -> 
+    | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 
+    -> 
       "write_backwards(" 
       ^ name
-      ^ ", head" ^ " + " ^ string_of_int (max_chars ctx_lookup typ - 1)
+      ^ ", head" ^ " + " ^ string_of_int (max_chars ctx_lookup typ - 1) 
+        (* TODO: migrate all writes to write_backwards and then we can change the head += things
+          so that we don't need to add to it here *)
       ^ ", " 
       ^ string_of_int (max_chars ctx_lookup typ) 
       ^ ", ' ');"
