@@ -5,8 +5,11 @@ class json_logger
 public:
     json_logger() {}
 
-    void log(const TStruct& t) {
+    const char* log(const TStruct& t) {
         t.format(_buf.data());
-        std::cout << _buf << std::endl;
+        return _buf.c_str();
     }
+
+    // consider implementing fast serialize_backwards(<type>, char* buf, int count, char pad) things
+    // then filling rest with pad char
 };

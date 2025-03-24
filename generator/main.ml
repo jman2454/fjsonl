@@ -119,13 +119,15 @@ let format_string = function
 
 type context = { template : string }
 
+(* TODO: get rid of the null bytes. overwrite them with whatever appropriate *)
+
 (* so max chars will take in context containing mappings for already-parsed struct types that may be Nested elsewhere *)
 let max_chars ctx_lookup = function
 | Char -> 1
 | Int8 | UInt8 -> 4
 | Bool | Int16 | UInt16 -> 6
-| Int32 | UInt32 -> 11
-| Int64 | UInt64 -> 21
+| Int32 | UInt32 -> 12
+| Int64 | UInt64 -> 22
 | Nested s -> 
   (match StringMap.find_opt s ctx_lookup with
   | Some ctx -> String.length (ctx.template |> Str.global_replace (Str.regexp {|\\|}) "")
@@ -163,27 +165,41 @@ let format_value (name, typ) =
   | Bool -> name ^ " ? \"true\" : \"false\""
   | _ -> name
 
-let generate_format_call (name, typ) offset ctx_lookup = 
-  match typ with 
-  | Nested _ -> "head += " ^ string_of_int offset ^ ";\n\t\t" ^ name ^ ".format(head);"
-  | _ -> 
-    "head += " 
-    ^ (string_of_int offset) 
-    ^ ";\n\t\tsnprintf(head, " 
-    ^ string_of_int (max_chars ctx_lookup typ) 
-    ^ ", \""
-    ^ format_string typ
-    ^ "\", " 
-    ^ string_of_int (max_chars ctx_lookup typ - 1)
-    ^ ", "
-    ^ format_value (name, typ)
-    ^ ");"
+let generate_format_call (name, typ) offset ctx_lookup is_last = 
+  "head += " 
+  ^ string_of_int offset 
+  ^ ";\n\t\t" 
+  ^ (
+    match typ with 
+    | Nested _ -> name ^ ".format(head);"
+    | Int32 -> 
+      "write_backwards(" 
+      ^ name
+      ^ ", head" ^ " + " ^ string_of_int (max_chars ctx_lookup typ - 1)
+      ^ ", " 
+      ^ string_of_int (max_chars ctx_lookup typ) 
+      ^ ", ' ');"
+    | _ -> 
+      "snprintf(head, " 
+      ^ string_of_int (max_chars ctx_lookup typ + 1) 
+      ^ ", \""
+      ^ format_string typ
+      ^ "\", " 
+      ^ string_of_int (max_chars ctx_lookup typ)
+      ^ ", "
+      ^ format_value (name, typ)
+      ^ ");\n\t\thead[" (* the overwrite here is unfortunate, and gets around the null terminator of snprintf *)
+      ^ string_of_int (max_chars ctx_lookup typ)
+      ^ "] = "
+      ^ (if is_last then "'}'" else "','")
+      ^ ";"
+  )
 
 let generate_format_method members offsets ctx_lookup = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
   ^ string_join (
-      fun (member, offset) -> generate_format_call member offset ctx_lookup
-    ) "\n\t\t" (List.combine members offsets)
+      fun ((member, offset), is_last) -> generate_format_call member offset ctx_lookup is_last
+    ) "\n\t\t" (List.combine members offsets |> List.mapi (fun i t -> t, i = List.length members - 1))
   ^ "\n\t}"
 
 let generate_member_defn (name, typ) = 
@@ -219,5 +235,6 @@ parse_yaml "/users/jamesmeyers/life/test_file.yaml"
 |> string_join (fun x -> x) "\n"
 |> (fun s -> {|#include <cstdint>
 #include <iostream>
-#include <string>|} ^ "\n\n" ^ s)
+#include <string>
+#include "util.h"|} ^ "\n\n" ^ s)
 |> print_endline
