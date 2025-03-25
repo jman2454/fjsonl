@@ -35,6 +35,7 @@ Output C++:
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "util.h"
 
 struct test_struct_orig
 {	int32_t x;
@@ -42,17 +43,17 @@ struct test_struct_orig
 	bool b;
 	static std::string empty()
 	{
-		return "{\"x\":           ,\"y\":           ,\"b\":      }";
+		return "{\"x\":            ,\"y\":            ,\"b\":      }";
 	}
 	void format(char* buf) const
 	{
 		auto head { buf };
 		head += 5;
-		snprintf(head, 11, "%*d", 10, x);
-		head += 16;
-		snprintf(head, 11, "%*d", 10, y);
-		head += 16;
-		snprintf(head, 6, "%*s", 5, b ? "true" : "false");
+		write_backwards(x, head + 11, 12, ' ');
+		head += 17;
+		write_backwards(y, head + 11, 12, ' ');
+		head += 17;
+		write_backwards(b, head + 5, 6, ' ');
 	}
 };
 struct outer_struct
@@ -63,21 +64,21 @@ struct outer_struct
 	uint64_t f;
 	static std::string empty()
 	{
-		return "{\"x\":           ,\"inner\":{\"x\":           ,\"y\":           ,\"b\":      },\"b\":      ,\"z\":{\"x\":           ,\"y\":           ,\"b\":      },\"f\":                     }";
+		return "{\"x\":            ,\"inner\":{\"x\":            ,\"y\":            ,\"b\":      },\"b\":      ,\"z\":{\"x\":            ,\"y\":            ,\"b\":      },\"f\":                      }";
 	}
 	void format(char* buf) const
 	{
 		auto head { buf };
 		head += 5;
-		snprintf(head, 11, "%*d", 10, x);
-		head += 20;
+		write_backwards(x, head + 11, 12, ' ');
+		head += 21;
 		inner.format(head);
-		head += 49;
-		snprintf(head, 6, "%*s", 5, b ? "true" : "false");
+		head += 51;
+		write_backwards(b, head + 5, 6, ' ');
 		head += 11;
 		z.format(head);
-		head += 49;
-		snprintf(head, 21, "%*llu", 20, f);
+		head += 51;
+		write_backwards(f, head + 21, 22, ' ');
 	}
 };
 ```

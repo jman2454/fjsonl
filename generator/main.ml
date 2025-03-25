@@ -166,10 +166,12 @@ let format_value (name, typ) =
 let generate_format_call (name, typ) offset ctx_lookup is_last = 
   "head += " 
   ^ string_of_int offset 
-  ^ ";\n\t\t" 
+  ^ ";\n\t\t"
   ^ (
     match typ with 
     | Nested _ -> name ^ ".format(head);"
+    | Char -> "*head = " ^ name ^ ";" 
+      (* special case, no need to fill padding because we only ever write one char *)
     | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 | Bool
     -> 
       "write_backwards(" 

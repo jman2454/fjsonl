@@ -17,3 +17,11 @@ members:
 - b: bool
 - z: test_struct_orig
 - f: uint64
+
+name: wow_struct
+members: 
+- x: int32
+- inner: outer_struct
+- b: bool
+- z: test_struct_orig
+- f: char

@@ -5,6 +5,13 @@ template <> struct is_signed_int<int16_t> : std::true_type {};
 template <> struct is_signed_int<int32_t> : std::true_type {};
 template <> struct is_signed_int<int64_t> : std::true_type {};
 
+// another stupid optimization to consider
+// if char at head is already == pad after formatting the value,
+// just return
+
+// also for negatives, remove branching by indexing 0 or 1 into a fixed 
+// size array for the - sign? other char is pad
+
 template <typename T, 
 typename = std::enable_if_t<is_signed_int<T>::value>,
 typename = void> // differentiate from uints

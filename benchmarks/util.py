@@ -7,7 +7,7 @@ def frozendict(d):
 
 def get_jsons(filename):
     with open(filename, 'r') as f:
-        result = [ frozendict(json.loads(l.replace('\0', ''))) for l in f.read().split('\n') if l ]
+        result = [ frozendict(json.loads(l)) for l in f.read().split('\n') if l ]
         return result
     
 if __name__ == '__main__':
