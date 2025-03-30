@@ -110,9 +110,7 @@ module StringMap = Map.Make(String)
 
 (* not going to do the topo sort yet -- we'll assume things are given in DAG order *)
 
-type context = { template : string }
-
-let value_length_expr ctx_lookup = function
+let value_length_expr = function
 | Float -> "max_float_chars"
 | Double -> "max_double_chars"
 | Char -> "1"
@@ -120,41 +118,35 @@ let value_length_expr ctx_lookup = function
 | Bool | Int16 | UInt16 -> "6"
 | Int32 | UInt32 -> "12"
 | Int64 | UInt64 -> "22"
-| Nested s -> 
-  (match StringMap.find_opt s ctx_lookup with
-  | Some ctx -> String.length (ctx.template |> Str.global_replace (Str.regexp {|\\|}) "") |> string_of_int
-  | _ -> failwith ("unknown type: " ^ s))
+| Nested s -> s ^ {|::empty().size()|}
 | String -> failwith "bad"
 
 (* todo make offsets constexpr *)
-let compute_offsets members ctx_lookup = 
+let compute_offsets members = 
   List.fold_left (fun (prev_length_expr, offsets) (name, typ) -> 
     (* 4 because (comma|open brace), (quote), (quote), (colon) *)
-    (value_length_expr ctx_lookup typ, offsets@[prev_length_expr ^ "+ 4 + " ^ string_of_int (String.length name)])
+    (value_length_expr typ, offsets@[prev_length_expr ^ " + 4 + " ^ string_of_int (String.length name)])
   ) ("", []) members
   |> snd
 
-let member_type_template typ ctx_lookup = 
+let member_type_template typ = 
   match typ with 
-  | Nested s -> 
-    (match StringMap.find_opt s ctx_lookup with
-    | Some ctx -> ctx.template
-    | _ -> failwith ("unknown type: " ^ s))
-  | _ -> "std::string(" ^ value_length_expr ctx_lookup typ ^ ", ' ')"
+  | Nested t -> t ^ {|::empty()|}
+  | _ -> "std::string(" ^ value_length_expr typ ^ ", ' ')"
 
-let member_template ctx_lookup (name, typ) = 
-  "std::string(\"\\\"" ^ name ^ "\\\":\") + " ^ member_type_template typ ctx_lookup
+let member_template (name, typ) = 
+  "std::string(\"\\\"" ^ name ^ "\\\":\") + " ^ member_type_template typ
 
-let make_empty_template members ctx_lookup = 
+let make_empty_template members = 
   if List.length members = 0 then {|"{}"|} else 
   {|std::string("{") + |}
-  ^ string_join (fun s -> member_template ctx_lookup s) {| + std::string(",") + |} members
+  ^ string_join (fun s -> member_template s) {| + std::string(",") + |} members
   ^ {| + std::string("}")|}
 
-let generate_template_method members ctx_lookup = 
-  "\tstatic std::string empty()\n\t{\n\t\treturn " ^ make_empty_template members ctx_lookup ^ ";\n\t}"
+let generate_template_method members = 
+  "\tstatic std::string empty()\n\t{\n\t\treturn " ^ make_empty_template members ^ ";\n\t}"
 
-let generate_format_call (name, typ) offset_expr ctx_lookup = 
+let generate_format_call (name, typ) offset_expr = 
   "head += " 
   ^ offset_expr 
   ^ ";\n\t\t"
@@ -168,16 +160,16 @@ let generate_format_call (name, typ) offset_expr ctx_lookup =
     -> 
       "write_backwards(" 
       ^ name
-      ^ ", head" ^ " + " ^ value_length_expr ctx_lookup typ ^ " - 1"
+      ^ ", head" ^ " + " ^ value_length_expr typ ^ " - 1"
       ^ ", " 
-      ^ value_length_expr ctx_lookup typ 
+      ^ value_length_expr typ 
       ^ ", ' ');"
   )
 
-let generate_format_method members offsets ctx_lookup = 
+let generate_format_method members offsets = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
   ^ string_join (
-      fun (member, offset) -> generate_format_call member offset ctx_lookup
+      fun (member, offset) -> generate_format_call member offset
     ) "\n\t\t" (List.combine members offsets)
   ^ "\n\t}"
 
@@ -187,23 +179,19 @@ let generate_member_defn (name, typ) =
 let generate_member_defns members = 
   string_join (generate_member_defn) "\n\t" members
 
-let generate_struct def ctx_lookup = 
-  let template = make_empty_template def.members ctx_lookup in 
-  StringMap.add def.name { template = template } ctx_lookup,
+let generate_struct def = 
   "struct " ^ def.name ^ "\n{\t"
   ^ generate_member_defns def.members
   ^ "\n"
-  ^ generate_template_method def.members ctx_lookup
+  ^ generate_template_method def.members
   ^ "\n"
-  ^ generate_format_method def.members (compute_offsets def.members ctx_lookup) ctx_lookup
+  ^ generate_format_method def.members (compute_offsets def.members)
   ^ "\n};"
 
 let generate_structs definitions = 
-  List.fold_left (fun (ctx, structs) definition -> 
-    let ctx, cpp_generated = generate_struct definition ctx in 
-    (ctx, cpp_generated::structs)
-  ) (StringMap.empty, []) definitions
-  |> snd
+  List.fold_left (fun structs definition -> 
+    (generate_struct definition::structs)
+  ) [] definitions
   |> List.rev
 
 let () = 
