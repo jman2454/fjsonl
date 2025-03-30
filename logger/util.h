@@ -120,37 +120,12 @@ void write_backwards(T value, char* buf, int count, char pad)
     }
 }
 
-// struct ieee754_binary32 {
-//     static constexpr int total_bits = 32;
-//     static constexpr int significand_bits = 23;
-//     static constexpr int exponent_bits = 8;
-//     static constexpr int min_exponent = -126;
-//     static constexpr int max_exponent = 127;
-//     static constexpr int exponent_bias = -127;
-//     static constexpr int decimal_significand_digits = 9;
-//     static constexpr int decimal_exponent_digits = 2;
-// };
-// struct ieee754_binary64 {
-//     static constexpr int total_bits = 64;
-//     static constexpr int significand_bits = 52;
-//     static constexpr int exponent_bits = 11;
-//     static constexpr int min_exponent = -1022;
-//     static constexpr int max_exponent = 1023;
-//     static constexpr int exponent_bias = -1023;
-//     static constexpr int decimal_significand_digits = 17;
-//     static constexpr int decimal_exponent_digits = 3;
-// };
-
 constexpr int max_double_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary64>;
 constexpr int max_float_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary32>;
 
 void write_backwards(float value, char* buf, int count, char pad) 
 {
-    // constexpr int buffer_length =
-    //   jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary64>;
-    // double x = 1.234;  // Also works for float
-    // char buffer[buffer_length];
-
+    // description from dragonbox repo: 
     // Does not null-terminate the buffer; returns the next-to-end pointer
     // buffer is now { '1', '.', '2', '3', '4', 'E', '0', (garbages) }
     // you can wrap the buffer with things like std::string_view
