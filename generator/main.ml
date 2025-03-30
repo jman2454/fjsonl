@@ -118,14 +118,15 @@ let value_length_expr = function
 | Bool | Int16 | UInt16 -> "6"
 | Int32 | UInt32 -> "12"
 | Int64 | UInt64 -> "22"
-| Nested s -> s ^ {|::empty().size()|}
+| Nested s -> s ^ {|::length|}
 | String -> failwith "bad"
 
-(* todo make offsets constexpr *)
-let compute_offsets members = 
+let compute_offset_exprs members = 
   List.fold_left (fun (prev_length_expr, offsets) (name, typ) -> 
     (* 4 because (comma|open brace), (quote), (quote), (colon) *)
-    (value_length_expr typ, offsets@[prev_length_expr ^ " + 4 + " ^ string_of_int (String.length name)])
+    (value_length_expr typ, offsets@[
+      (if prev_length_expr <> "" then prev_length_expr ^ " + " else "")
+      ^ "4 + " ^ string_of_int (String.length name)])
   ) ("", []) members
   |> snd
 
@@ -146,9 +147,22 @@ let make_empty_template members =
 let generate_template_method members = 
   "\tstatic std::string empty()\n\t{\n\t\treturn " ^ make_empty_template members ^ ";\n\t}"
 
-let generate_format_call (name, typ) offset_expr = 
+let generate_member_length_expr (name, typ) = 
+  (* quotes and colon *)
+  "3 + " ^ string_of_int (String.length name) ^ " + " ^ value_length_expr typ
+
+let generate_type_length_expr members = 
+  "2 + " (* opening and ending braces *)
+  ^ string_join generate_member_length_expr " + " members
+  ^ " + "
+  ^ (List.length members - 1 |> string_of_int) (* commas *)
+
+let generate_length_definition members = 
+  "static inline constexpr int length = " ^ generate_type_length_expr members ^ ";"
+
+let generate_format_call (name, typ) = 
   "head += " 
-  ^ offset_expr 
+  ^ "_gen_offset_" ^ name
   ^ ";\n\t\t"
   ^ (
     match typ with 
@@ -166,26 +180,34 @@ let generate_format_call (name, typ) offset_expr =
       ^ ", ' ');"
   )
 
-let generate_format_method members offsets = 
+let generate_format_method members  = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
-  ^ string_join (
-      fun (member, offset) -> generate_format_call member offset
-    ) "\n\t\t" (List.combine members offsets)
+  ^ string_join generate_format_call "\n\t\t" members
   ^ "\n\t}"
 
 let generate_member_defn (name, typ) = 
   string_of_member_type typ ^ " " ^ name ^ ";"
 
 let generate_member_defns members = 
-  string_join (generate_member_defn) "\n\t" members
+  string_join generate_member_defn "\n\t" members
+
+let generate_offset_definition ((name, _), offset_expr) = 
+  "static constexpr int _gen_offset_" ^ name ^ " = " ^ offset_expr ^ ";"
+
+let generate_offsets_exprs members_offsets = 
+  string_join generate_offset_definition "\n\t" members_offsets
 
 let generate_struct def = 
   "struct " ^ def.name ^ "\n{\t"
   ^ generate_member_defns def.members
   ^ "\n"
+  ^ generate_length_definition def.members
+  ^ "\n"
   ^ generate_template_method def.members
   ^ "\n"
-  ^ generate_format_method def.members (compute_offsets def.members)
+  ^ generate_offsets_exprs (List.combine def.members (compute_offset_exprs def.members))
+  ^ "\n"
+  ^ generate_format_method def.members
   ^ "\n};"
 
 let generate_structs definitions = 
