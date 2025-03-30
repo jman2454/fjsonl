@@ -140,18 +140,19 @@ let member_type_template typ ctx_lookup =
     (match StringMap.find_opt s ctx_lookup with
     | Some ctx -> ctx.template
     | _ -> failwith ("unknown type: " ^ s))
-  | _ -> "std::string{" ^ value_length_expr ctx_lookup typ ^ ", ' '}"
+  | _ -> "std::string(" ^ value_length_expr ctx_lookup typ ^ ", ' ')"
 
 let member_template ctx_lookup (name, typ) = 
-  "\\\"" ^ name ^ "\\\":" ^ member_type_template typ ctx_lookup
+  "std::string(\"\\\"" ^ name ^ "\\\":\") + " ^ member_type_template typ ctx_lookup
 
 let make_empty_template members ctx_lookup = 
-  "{"
-  ^ string_join (member_template ctx_lookup) "," members
-  ^ "}"
+  if List.length members = 0 then {|"{}"|} else 
+  {|std::string("{") + |}
+  ^ string_join (fun s -> member_template ctx_lookup s) {| + std::string(",") + |} members
+  ^ {| + std::string("}")|}
 
 let generate_template_method members ctx_lookup = 
-  "\tstatic std::string empty()\n\t{\n\t\treturn \"" ^ make_empty_template members ctx_lookup ^ "\";\n\t}"
+  "\tstatic std::string empty()\n\t{\n\t\treturn " ^ make_empty_template members ctx_lookup ^ ";\n\t}"
 
 let generate_format_call (name, typ) offset_expr ctx_lookup = 
   "head += " 
@@ -168,8 +169,6 @@ let generate_format_call (name, typ) offset_expr ctx_lookup =
       "write_backwards(" 
       ^ name
       ^ ", head" ^ " + " ^ value_length_expr ctx_lookup typ ^ " - 1"
-        (* TODO: migrate all writes to write_backwards and then we can change the head += things
-          so that we don't need to add to it here *)
       ^ ", " 
       ^ value_length_expr ctx_lookup typ 
       ^ ", ' ');"
