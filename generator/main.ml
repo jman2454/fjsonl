@@ -158,7 +158,7 @@ let generate_type_length_expr members =
   ^ (List.length members - 1 |> string_of_int) (* commas *)
 
 let generate_length_definition members = 
-  "static inline constexpr int length = " ^ generate_type_length_expr members ^ ";"
+  "\tstatic inline constexpr int length = " ^ generate_type_length_expr members ^ ";"
 
 let generate_format_call (name, typ) = 
   "head += " 
@@ -196,13 +196,13 @@ let generate_member_defn (name, typ) =
   string_of_member_type typ ^ " " ^ name ^ ";"
 
 let generate_member_defns members = 
-  string_join generate_member_defn "\n\t" members
+  "\n\t" ^ string_join generate_member_defn "\n\t" members
 
 let generate_offset_definition ((name, _), offset_expr) = 
   "static constexpr int _gen_offset_" ^ name ^ " = " ^ offset_expr ^ ";"
 
 let generate_offsets_exprs members_offsets = 
-  string_join generate_offset_definition "\n\t" members_offsets
+  "\t" ^ string_join generate_offset_definition "\n\t" members_offsets
 
 let generate_struct def = 
   "struct " ^ def.name ^ "\n{\t"
