@@ -30,6 +30,8 @@ and member_type =
 | Int64
 | Char
 | Bool
+| Float
+| Double
 | Nested of string
 and member = string * member_type
 
@@ -47,8 +49,11 @@ let string_of_member_type typ =
   | Int64 -> "int64_t"
   | Char -> "char"
   | Bool -> "bool"
+  | Float -> "float"
+  | Double -> "double"
   | Nested n -> n
 
+  (* random idea-- static time constructor surjectivity analysis for sum types *)
 let parse_type type_string = 
   match type_string with 
   | "string" -> String
@@ -62,6 +67,8 @@ let parse_type type_string =
   | "int64" -> Int64
   | "char" -> Char
   | "bool" -> Bool
+  | "float" -> Float
+  | "double" -> Double
   | s -> Nested(s)
 
 let string_of_member member = 
@@ -103,131 +110,117 @@ module StringMap = Map.Make(String)
 
 (* not going to do the topo sort yet -- we'll assume things are given in DAG order *)
 
-(* we'll probably want a dynamic mapping of max len for (nested) structs *)
-
-(* maybe migrate to inttypes.h for macro usage *)
-let format_string = function 
-| Int8 -> "%*hhd"
-| Int16 -> "%*hd"
-| Int32 -> "%*d"
-| Int64 -> "%*lld"
-| UInt8 | UInt16 | UInt32 -> "%*u"
-| UInt64 -> "%*llu"
-| String | Bool -> "%*s"
-| Char -> "%*c"
-| Nested _ -> failwith "no format string for Nested!"
-
-type context = { template : string }
-
-(* so max chars will take in context containing mappings for already-parsed struct types that may be Nested elsewhere *)
-let max_chars ctx_lookup = function
-| Char -> 1
-| Int8 | UInt8 -> 4
-| Bool | Int16 | UInt16 -> 6
-| Int32 | UInt32 -> 12
-| Int64 | UInt64 -> 22
-| Nested s -> 
-  (match StringMap.find_opt s ctx_lookup with
-  | Some ctx -> String.length (ctx.template |> Str.global_replace (Str.regexp {|\\|}) "")
-  | _ -> failwith ("unknown type: " ^ s))
+let value_length_expr = function
+| Float -> "max_float_length"
+| Double -> "max_double_length"
+| Char -> "1"
+| Int8 | UInt8 -> "4"
+| Bool | Int16 | UInt16 -> "6"
+| Int32 | UInt32 -> "12"
+| Int64 | UInt64 -> "22"
+| Nested s -> s ^ {|::length|}
 | String -> failwith "bad"
 
-let compute_offsets members ctx_lookup = 
-  List.fold_left (fun (prev_max_chars, offsets) (name, typ) -> 
+let compute_offset_exprs members = 
+  List.fold_left (fun (prev_length_expr, offsets) (name, typ) -> 
     (* 4 because (comma|open brace), (quote), (quote), (colon) *)
-    (max_chars ctx_lookup typ, offsets@[prev_max_chars + 4 + (String.length name)])
-  ) (0, []) members
+    (value_length_expr typ, offsets@[
+      (if prev_length_expr <> "" then prev_length_expr ^ " + " else "")
+      ^ "4 + " ^ string_of_int (String.length name)])
+  ) ("", []) members
   |> snd
 
-let member_type_template typ ctx_lookup = 
+let member_type_template typ = 
   match typ with 
-  | Nested s -> 
-    (match StringMap.find_opt s ctx_lookup with
-    | Some ctx -> ctx.template
-    | _ -> failwith ("unknown type: " ^ s))
-  | t -> String.make (max_chars ctx_lookup t) ' '
+  | Nested t -> t ^ {|::empty()|}
+  | _ -> "std::string(" ^ value_length_expr typ ^ ", ' ')"
 
-let member_template ctx_lookup (name, typ) = 
-  "\\\"" ^ name ^ "\\\":" ^ member_type_template typ ctx_lookup
+let member_template (name, typ) = 
+  "std::string(\"\\\"" ^ name ^ "\\\":\") + " ^ member_type_template typ
 
-let make_empty_template members ctx_lookup = 
-  "{"
-  ^ string_join (member_template ctx_lookup) "," members
-  ^ "}"
+let make_empty_template members = 
+  if List.length members = 0 then {|"{}"|} else 
+  {|std::string("{") + |}
+  ^ string_join (fun s -> member_template s) {| + std::string(",") + |} members
+  ^ {| + std::string("}")|}
 
-let generate_template_method members ctx_lookup = 
-  "\tstatic std::string empty()\n\t{\n\t\treturn \"" ^ make_empty_template members ctx_lookup ^ "\";\n\t}"
+let generate_template_method members = 
+  "\tstatic std::string empty()\n\t{\n\t\treturn " ^ make_empty_template members ^ ";\n\t}"
 
-let format_value (name, typ) = 
-  match typ with 
-  | Bool -> name ^ " ? \"true\" : \"false\""
-  | _ -> name
+let generate_member_length_expr (name, typ) = 
+  (* quotes and colon *)
+  "3 + " ^ string_of_int (String.length name) ^ " + " ^ value_length_expr typ
 
-let generate_format_call (name, typ) offset ctx_lookup is_last = 
+let generate_type_length_expr members = 
+  "2 + " (* opening and ending braces *)
+  ^ string_join generate_member_length_expr " + " members
+  ^ " + "
+  ^ (List.length members - 1 |> string_of_int) (* commas *)
+
+let generate_length_definition members = 
+  "static inline constexpr int length = " ^ generate_type_length_expr members ^ ";"
+
+let generate_format_call (name, typ) = 
   "head += " 
-  ^ string_of_int offset 
+  ^ "_gen_offset_" ^ name
   ^ ";\n\t\t"
   ^ (
     match typ with 
     | Nested _ -> name ^ ".format(head);"
     | Char -> "*head = " ^ name ^ ";" 
+    | String -> failwith "bad"
+    | Float | Double -> 
+      "write_forwards("
+      ^ name
+      ^ ", head"
+      ^ ", "
+      ^ value_length_expr typ
+      ^ ", ' ');"
       (* special case, no need to fill padding because we only ever write one char *)
     | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 | Bool
     -> 
-      "write_backwards(" 
+      "write_backwards("
       ^ name
-      ^ ", head" ^ " + " ^ string_of_int (max_chars ctx_lookup typ - 1) 
-        (* TODO: migrate all writes to write_backwards and then we can change the head += things
-          so that we don't need to add to it here *)
+      ^ ", head" ^ " + " ^ value_length_expr typ ^ " - 1"
       ^ ", " 
-      ^ string_of_int (max_chars ctx_lookup typ) 
+      ^ value_length_expr typ 
       ^ ", ' ');"
-    | _ -> 
-      "snprintf(head, " 
-      ^ string_of_int (max_chars ctx_lookup typ + 1) 
-      ^ ", \""
-      ^ format_string typ
-      ^ "\", " 
-      ^ string_of_int (max_chars ctx_lookup typ)
-      ^ ", "
-      ^ format_value (name, typ)
-      ^ ");\n\t\thead[" (* the overwrite here is unfortunate, and gets around the null terminator of snprintf *)
-      ^ string_of_int (max_chars ctx_lookup typ)
-      ^ "] = "
-      ^ (if is_last then "'}'" else "','")
-      ^ ";"
   )
 
-let generate_format_method members offsets ctx_lookup = 
+let generate_format_method members  = 
   "\tvoid format(char* buf) const\n\t{\n\t\tauto head { buf };\n\t\t"
-  ^ string_join (
-      fun ((member, offset), is_last) -> generate_format_call member offset ctx_lookup is_last
-    ) "\n\t\t" (List.combine members offsets |> List.mapi (fun i t -> t, i = List.length members - 1))
+  ^ string_join generate_format_call "\n\t\t" members
   ^ "\n\t}"
 
 let generate_member_defn (name, typ) = 
   string_of_member_type typ ^ " " ^ name ^ ";"
 
 let generate_member_defns members = 
-  string_join (generate_member_defn) "\n\t" members
+  string_join generate_member_defn "\n\t" members
 
-let generate_struct def ctx_lookup = 
-  let template = make_empty_template def.members ctx_lookup in 
-  StringMap.add def.name { template = template } ctx_lookup,
+let generate_offset_definition ((name, _), offset_expr) = 
+  "static constexpr int _gen_offset_" ^ name ^ " = " ^ offset_expr ^ ";"
+
+let generate_offsets_exprs members_offsets = 
+  string_join generate_offset_definition "\n\t" members_offsets
+
+let generate_struct def = 
   "struct " ^ def.name ^ "\n{\t"
   ^ generate_member_defns def.members
   ^ "\n"
-  ^ generate_template_method def.members ctx_lookup
+  ^ generate_length_definition def.members
   ^ "\n"
-  ^ generate_format_method def.members (compute_offsets def.members ctx_lookup) ctx_lookup
+  ^ generate_template_method def.members
+  ^ "\n"
+  ^ generate_offsets_exprs (List.combine def.members (compute_offset_exprs def.members))
+  ^ "\n"
+  ^ generate_format_method def.members
   ^ "\n};"
 
 let generate_structs definitions = 
-  List.fold_left (fun (ctx, structs) definition -> 
-    let ctx, cpp_generated = generate_struct definition ctx in 
-    (ctx, cpp_generated::structs)
-  ) (StringMap.empty, []) definitions
-  |> snd
+  List.fold_left (fun structs definition -> 
+    (generate_struct definition::structs)
+  ) [] definitions
   |> List.rev
 
 let () = 

@@ -1,3 +1,5 @@
+#include <dragonbox/dragonbox_to_chars.h>
+
 template <typename T>
 struct is_signed_int : std::false_type {};
 template <> struct is_signed_int<int8_t> : std::true_type {};
@@ -115,5 +117,42 @@ void write_backwards(T value, char* buf, int count, char pad)
     {
         *(buf--) = pad;
         remaining--;
+    }
+}
+
+// consider just always using double precision
+// looks like that's what other libraries do
+
+static inline constexpr int max_double_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary64>;
+static inline constexpr int max_float_length = max_double_length;
+// jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary32>;
+
+// void write_forwards(float value, char* buf, int count, char pad) 
+// {
+//     // description from dragonbox repo: 
+//     // Does not null-terminate the buffer; returns the next-to-end pointer
+//     // buffer is now { '1', '.', '2', '3', '4', 'E', '0', (garbages) }
+//     // you can wrap the buffer with things like std::string_view
+//     auto head = jkj::dragonbox::to_chars_n(value, buf);
+//     *head = ',';
+//     auto written = head - buf;
+//     while (written++ < count)
+//     {
+//         *(++head) = ' ';
+//     }
+// }
+
+void write_forwards(double value, char* buf, int count, char pad) 
+{
+    // description from dragonbox repo: 
+    // Does not null-terminate the buffer; returns the next-to-end pointer
+    // buffer is now { '1', '.', '2', '3', '4', 'E', '0', (garbages) }
+    // you can wrap the buffer with things like std::string_view
+    auto head = jkj::dragonbox::to_chars_n(value, buf);
+    *head = ',';
+    auto written = head - buf;
+    while (written++ < count)
+    {
+        *(++head) = ' ';
     }
 }

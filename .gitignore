@@ -10,3 +10,5 @@ _build/*
 *.cmake
 **/json_benchmark
 *.trace
+benchmarks/_deps
+**/*.a

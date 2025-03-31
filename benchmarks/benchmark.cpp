@@ -36,6 +36,7 @@ namespace nlohmann {
                 {"x", obj.x},
                 {"inner", obj.inner},
                 {"b", obj.b},
+                {"ff", obj.ff},
                 {"z", obj.z},
                 {"f", obj.f}
             };
@@ -63,6 +64,8 @@ void serialize_outer_struct_rapid(rapidjson::Writer<rapidjson::StringBuffer>& wr
     serialize_test_struct_orig_rapid(writer, obj.inner);
     writer.Key("b");
     writer.Bool(obj.b);
+    writer.Key("ff");
+    writer.Double(obj.ff);
     writer.Key("z");
     serialize_test_struct_orig_rapid(writer, obj.z);
     writer.Key("f");
@@ -76,6 +79,11 @@ void randomize_struct(outer_struct& obj, std::mt19937& rng) {
     std::uniform_int_distribution<uint64_t> uint_dist(0, std::numeric_limits<uint64_t>::max());
     std::uniform_int_distribution<int> bool_dist(0, 1);
     
+    std::uniform_real_distribution<float> float_dist(
+        std::numeric_limits<float>::min(),
+        std::numeric_limits<float>::max()        
+    );
+
     obj.x = int_dist(rng);
     obj.inner.x = int_dist(rng);
     obj.inner.y = int_dist(rng);
@@ -85,6 +93,7 @@ void randomize_struct(outer_struct& obj, std::mt19937& rng) {
     obj.z.y = int_dist(rng);
     obj.z.b = bool_dist(rng);
     obj.f = uint_dist(rng);
+    obj.ff = float_dist(rng);
 }
 
 // Benchmark function
