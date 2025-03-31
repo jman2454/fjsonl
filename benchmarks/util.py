@@ -9,8 +9,8 @@ def frozendict(d):
 # for now assume 32 bit precision always
 # somehow we can distinguish later
 def convert_floats(d):
-    if type(d) == float:
-        return np.float32(d)
+    # if type(d) == float:
+    #     return np.float32(d)
     if type(d) != dict:
         return d
 
