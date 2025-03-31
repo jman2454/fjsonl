@@ -111,8 +111,8 @@ module StringMap = Map.Make(String)
 (* not going to do the topo sort yet -- we'll assume things are given in DAG order *)
 
 let value_length_expr = function
-| Float -> "max_float_chars"
-| Double -> "max_double_chars"
+| Float -> "max_float_length"
+| Double -> "max_double_length"
 | Char -> "1"
 | Int8 | UInt8 -> "4"
 | Bool | Int16 | UInt16 -> "6"
@@ -169,10 +169,17 @@ let generate_format_call (name, typ) =
     | Nested _ -> name ^ ".format(head);"
     | Char -> "*head = " ^ name ^ ";" 
     | String -> failwith "bad"
+    | Float | Double -> 
+      "write_forwards("
+      ^ name
+      ^ ", head"
+      ^ ", "
+      ^ value_length_expr typ
+      ^ ", ' ');"
       (* special case, no need to fill padding because we only ever write one char *)
-    | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 | Bool | Float | Double
+    | Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 | Bool
     -> 
-      "write_backwards(" 
+      "write_backwards("
       ^ name
       ^ ", head" ^ " + " ^ value_length_expr typ ^ " - 1"
       ^ ", " 

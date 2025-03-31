@@ -15,6 +15,7 @@ members:
 - x: int32
 - inner: test_struct_orig
 - b: bool
+- ff: float
 - z: test_struct_orig
 - f: uint64
 

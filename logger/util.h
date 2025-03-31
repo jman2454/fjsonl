@@ -120,14 +120,35 @@ void write_backwards(T value, char* buf, int count, char pad)
     }
 }
 
-constexpr int max_double_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary64>;
-constexpr int max_float_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary32>;
+static inline constexpr int max_double_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary64>;
+static inline constexpr int max_float_length = jkj::dragonbox::max_output_string_length<jkj::dragonbox::ieee754_binary32>;
 
-void write_backwards(float value, char* buf, int count, char pad) 
+void write_forwards(float value, char* buf, int count, char pad) 
 {
     // description from dragonbox repo: 
     // Does not null-terminate the buffer; returns the next-to-end pointer
     // buffer is now { '1', '.', '2', '3', '4', 'E', '0', (garbages) }
     // you can wrap the buffer with things like std::string_view
-    jkj::dragonbox::to_chars_n(value, buf);
+    auto head = jkj::dragonbox::to_chars_n(value, buf);
+    *head = ',';
+    auto written = head - buf;
+    while (written++ < count)
+    {
+        *(++head) = ' ';
+    }
+}
+
+void write_forwards(double value, char* buf, int count, char pad) 
+{
+    // description from dragonbox repo: 
+    // Does not null-terminate the buffer; returns the next-to-end pointer
+    // buffer is now { '1', '.', '2', '3', '4', 'E', '0', (garbages) }
+    // you can wrap the buffer with things like std::string_view
+    auto head = jkj::dragonbox::to_chars_n(value, buf);
+    *head = ',';
+    auto written = head - buf;
+    while (written++ < count)
+    {
+        *(++head) = ' ';
+    }
 }
