@@ -94,14 +94,12 @@ typename = void,
 typename = void>
 void write_backwards(T value, char* buf, int count, char pad) 
 {
-    int remaining = 0;
     if (value)
     {
         *(buf--) = 'e';
         *(buf--) = 'u';
         *(buf--) = 'r';
         *(buf--) = 't';
-        remaining = count - 4;
     }
     else
     {
@@ -110,13 +108,11 @@ void write_backwards(T value, char* buf, int count, char pad)
         *(buf--) = 'l';
         *(buf--) = 'a';
         *(buf--) = 'f';
-        remaining = count - 5;
     }
-
-    while (remaining > 0)
+    count -= 4 + !value;
+    while (count-- > 0)
     {
         *(buf--) = pad;
-        remaining--;
     }
 }
 
